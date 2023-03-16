@@ -16,12 +16,16 @@ var (
 func main() {
 	flag.Parse()
 
-	http.Handle("/", http.FileServer(http.Dir(*dir)))
+	fs := http.FileServer(http.Dir(*dir))
+	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		log.Printf("[%s] %s\n", req.Method, req.URL.Path)
+		fs.ServeHTTP(w, req)
+	}))
 
 	hostport := fmt.Sprintf("%s:%d", *host, *port)
-	log.Printf("serving directory %q on %q ...\n", *dir, hostport)
+	log.Printf("Serving directory %q on %q ...\n", *dir, hostport)
 
 	if err := http.ListenAndServe(hostport, nil); err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
+		log.Fatalf("Server error: %v", err)
 	}
 }
