@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -16,6 +20,17 @@ var (
 func main() {
 	flag.Parse()
 
+	ctxSignal, ctxStop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer ctxStop()
+
+	log.Println("Starting server...")
+	if err := run(ctxSignal); err != nil {
+		log.Fatalf("Error: %v\n", err)
+	}
+	log.Println("Server stopped.")
+}
+
+func run(ctx context.Context) error {
 	fs := http.FileServer(http.Dir(*dir))
 	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		log.Printf("[%s] %s\n", req.Method, req.URL.Path)
@@ -25,7 +40,25 @@ func main() {
 	hostport := fmt.Sprintf("%s:%d", *host, *port)
 	log.Printf("Serving directory %q on %q ...\n", *dir, hostport)
 
-	if err := http.ListenAndServe(hostport, nil); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+	server := &http.Server{
+		Addr: hostport,
+	}
+	serverErr := make(chan error, 1)
+	go func() {
+		err := server.ListenAndServe()
+		if !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- fmt.Errorf("server error: %w", err)
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+		log.Printf("Shutting down server ...\n")
+		if err := server.Shutdown(context.Background()); err != nil {
+			return fmt.Errorf("server shutdown error: %w", err)
+		}
+		return nil
 	}
 }
