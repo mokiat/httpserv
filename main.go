@@ -32,10 +32,10 @@ func main() {
 
 func run(ctx context.Context) error {
 	fs := http.FileServer(http.Dir(*dir))
-	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		log.Printf("[%s] %s\n", req.Method, req.URL.Path)
 		fs.ServeHTTP(w, req)
-	}))
+	})
 
 	hostport := fmt.Sprintf("%s:%d", *host, *port)
 	log.Printf("Serving directory %q on %q ...\n", *dir, hostport)
